@@ -25,9 +25,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "lightningcss-android-arm64": "^1.33.0",
     "tailwindcss": "^4",
     "tsx": "^4.20.3",
     "typescript": "^5"
   }
-}
+  }
