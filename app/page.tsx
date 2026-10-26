@@ -36,29 +36,36 @@ export default function Home() {
     }
   };
 
-  // Сохранение очков в базу (отправка в ваш API)
+  // Сохранение очков через новый API
   const claimReward = async () => {
     try {
-      const res = await fetch("/api/claim-daily", {
+      const userId = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || 0;
+      
+      const res = await fetch("/api/save-score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ points: score }),
+        body: JSON.stringify({ userId, score }),
       });
+
+      const data = await res.json();
+
       if (res.ok) {
-        alert(`Успешно! Вы заработали ${score} очков!`);
+        alert(`✅ Успешно! Вы заработали ${score} очков!`);
         setGameState("idle");
+        setScore(0);
+        setCombo(0);
       } else {
-        alert("Ошибка при сохранении очков.");
+        alert(`❌ Ошибка: ${data.error || "Не удалось сохранить"}`);
       }
     } catch (e) {
-      alert("Ошибка сети.");
+      alert("❌ Ошибка сети.");
     }
   };
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
       <h1 className="text-3xl font-bold mb-4">🎮 Combo Game</h1>
-      
+
       {gameState === "idle" && (
         <button
           onClick={startGame}
@@ -72,7 +79,7 @@ export default function Home() {
         <div className="text-center">
           <p className="text-xl mb-2">Комбо: {combo} 🔥</p>
           <p className="text-xl mb-8">Очки: {score}</p>
-          
+
           <div className="flex gap-4">
             {[0, 1, 2].map((i) => (
               <button
@@ -104,4 +111,4 @@ export default function Home() {
       )}
     </main>
   );
-    }
+}
