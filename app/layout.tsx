@@ -13,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="overflow-x-hidden">{children}</body>
+      <body className="overflow-x-hidden">
+        <script src="https://telegram.org/js/telegram-web-app.js" />
+        {children}
+      </body>
     </html>
   )
 }
