@@ -1,25 +1,21 @@
 "use client";
 import { useEffect, useState } from "react";
-import Script from "next/script";
 
 export default function Home() {
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [target, setTarget] = useState(0);
   const [gameState, setGameState] = useState<"idle" | "playing" | "won">("idle");
-  const [telegramReady, setTelegramReady] = useState(false);
 
-  // Загрузка Telegram WebApp SDK
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const checkTelegram = setInterval(() => {
+      const check = setInterval(() => {
         if (window.Telegram?.WebApp) {
           window.Telegram.WebApp.ready();
-          setTelegramReady(true);
-          clearInterval(checkTelegram);
+          clearInterval(check);
         }
       }, 100);
-      return () => clearInterval(checkTelegram);
+      return () => clearInterval(check);
     }
   }, []);
 
@@ -27,7 +23,7 @@ export default function Home() {
     setScore(0);
     setCombo(0);
     setGameState("playing");
-    newTarget();
+    setTarget(Math.floor(Math.random() * 3));
   };
 
   const newTarget = () => {
@@ -48,14 +44,7 @@ export default function Home() {
 
   const claimReward = async () => {
     try {
-      // Берем ID с задержкой, если нужно
-      let userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-      
-      if (!userId) {
-        // Если не в Telegram — для теста ставим 1
-        userId = 1;
-        console.log("Не в Telegram, используем тестовый ID");
-      }
+      const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
 
       const res = await fetch("/api/save-score", {
         method: "POST",
@@ -79,57 +68,52 @@ export default function Home() {
   };
 
   return (
-    <>
-      {/* Подключаем SDK */}
-      <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
-      
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
-        <h1 className="text-3xl font-bold mb-4">🎮 Combo Game</h1>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
+      <h1 className="text-3xl font-bold mb-4">🎮 Combo Game</h1>
 
-        {gameState === "idle" && (
+      {gameState === "idle" && (
+        <button
+          onClick={startGame}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl"
+        >
+          Начать игру
+        </button>
+      )}
+
+      {gameState === "playing" && (
+        <div className="text-center">
+          <p className="text-xl mb-2">Комбо: {combo} 🔥</p>
+          <p className="text-xl mb-8">Очки: {score}</p>
+
+          <div className="flex gap-4">
+            {[0, 1, 2].map((i) => (
+              <button
+                key={i}
+                onClick={() => handleClick(i)}
+                className={`w-20 h-20 rounded-xl text-2xl font-bold transition-colors ${
+                  i === target ? "bg-green-500" : "bg-gray-700 hover:bg-gray-600"
+                }`}
+              >
+                {i === target ? "👆" : "❓"}
+              </button>
+            ))}
+          </div>
+          <p className="mt-4 text-gray-400 text-sm">Нажми на 👆 как можно быстрее!</p>
+        </div>
+      )}
+
+      {gameState === "won" && (
+        <div className="text-center">
+          <h2 className="text-2xl text-red-500 mb-4">Комбо сброшено!</h2>
+          <p className="text-xl mb-6">Ваш счёт: {score} очков</p>
           <button
-            onClick={startGame}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl"
+            onClick={claimReward}
+            className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
           >
-            Начать игру
+            Забрать награду
           </button>
-        )}
-
-        {gameState === "playing" && (
-          <div className="text-center">
-            <p className="text-xl mb-2">Комбо: {combo} 🔥</p>
-            <p className="text-xl mb-8">Очки: {score}</p>
-
-            <div className="flex gap-4">
-              {[0, 1, 2].map((i) => (
-                <button
-                  key={i}
-                  onClick={() => handleClick(i)}
-                  className={`w-20 h-20 rounded-xl text-2xl font-bold transition-colors ${
-                    i === target ? "bg-green-500" : "bg-gray-700 hover:bg-gray-600"
-                  }`}
-                >
-                  {i === target ? "👆" : "❓"}
-                </button>
-              ))}
-            </div>
-            <p className="mt-4 text-gray-400 text-sm">Нажми на 👆 как можно быстрее!</p>
-          </div>
-        )}
-
-        {gameState === "won" && (
-          <div className="text-center">
-            <h2 className="text-2xl text-red-500 mb-4">Комбо сброшено!</h2>
-            <p className="text-xl mb-6">Ваш счёт: {score} очков</p>
-            <button
-              onClick={claimReward}
-              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
-            >
-              Забрать награду
-            </button>
-          </div>
-        )}
-      </main>
-    </>
+        </div>
+      )}
+    </main>
   );
 }
