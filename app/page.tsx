@@ -12,6 +12,8 @@ export default function Home() {
   const [combo, setCombo] = useState(0);
   const [target, setTarget] = useState(0);
   const [gameState, setGameState] = useState<"idle" | "playing" | "won">("idle");
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [balance, setBalance] = useState(0);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -19,15 +21,31 @@ export default function Home() {
         if (window.Telegram?.WebApp) {
           window.Telegram.WebApp.ready();
           clearInterval(check);
+          
+          const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
+          fetch(`/api/save-score?userId=${userId}`)
+            .then(res => res.json())
+            .then(data => setBalance(data.balance || 0))
+            .catch(console.error);
         }
       }, 100);
       return () => clearInterval(check);
     }
   }, []);
 
+  useEffect(() => {
+    if (gameState === "playing" && timeLeft > 0) {
+      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (timeLeft === 0 && gameState === "playing") {
+      setGameState("won");
+    }
+  }, [gameState, timeLeft]);
+
   const startGame = () => {
     setScore(0);
     setCombo(0);
+    setTimeLeft(30);
     setGameState("playing");
     setTarget(Math.floor(Math.random() * 3));
   };
@@ -61,7 +79,8 @@ export default function Home() {
       const data = await res.json();
 
       if (res.ok) {
-        alert(`✅ Успешно! Вы заработали ${score} очков!`);
+        setBalance(data.newBalance);
+        alert(`✅ Успешно! Вы заработали ${score} очков! Ваш общий баланс: ${data.newBalance}`);
         setGameState("idle");
         setScore(0);
         setCombo(0);
@@ -75,7 +94,8 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
-      <h1 className="text-3xl font-bold mb-4">🎮 Combo Game</h1>
+      <h1 className="text-3xl font-bold mb-2">🎮 Combo Game</h1>
+      <p className="text-xl mb-6 text-yellow-400">Ваш баланс: {balance} очков</p>
 
       {gameState === "idle" && (
         <button
@@ -88,8 +108,9 @@ export default function Home() {
 
       {gameState === "playing" && (
         <div className="text-center">
+          <p className="text-xl mb-2">⏱️ Время: {timeLeft} сек</p>
           <p className="text-xl mb-2">Комбо: {combo} 🔥</p>
-          <p className="text-xl mb-8">Очки: {score}</p>
+          <p className="text-xl mb-8">Очки за раунд: {score}</p>
 
           <div className="flex gap-4">
             {[0, 1, 2].map((i) => (
@@ -104,14 +125,13 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <p className="mt-4 text-gray-400 text-sm">Нажми на 👆 как можно быстрее!</p>
         </div>
       )}
 
       {gameState === "won" && (
         <div className="text-center">
-          <h2 className="text-2xl text-red-500 mb-4">Комбо сброшено!</h2>
-          <p className="text-xl mb-6">Ваш счёт: {score} очков</p>
+          <h2 className="text-2xl text-red-500 mb-4">Время вышло!</h2>
+          <p className="text-xl mb-6">Ваш счёт за раунд: {score} очков</p>
           <button
             onClick={claimReward}
             className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
@@ -122,4 +142,4 @@ export default function Home() {
       )}
     </main>
   );
-          }
+}
