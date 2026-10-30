@@ -1,6 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 
+declare global {
+  interface Window {
+    Telegram?: any;
+  }
+}
+
 export default function Home() {
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -116,4 +122,4 @@ export default function Home() {
       )}
     </main>
   );
-            }
+          }
