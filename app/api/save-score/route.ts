@@ -3,20 +3,23 @@ import { kv } from '@vercel/kv'
 
 export async function POST(req: NextRequest) {
     try {
-        const { userId, score } = await req.json()
+        const { userId, score, firstName } = await req.json()
         if (!userId || typeof score !== 'number') {
             return NextResponse.json({ error: 'userId и score обязательны' }, { status: 400 })
         }
 
         const userIdStr = userId.toString()
-        // Получаем текущий баланс
         const current = (await kv.get<number>(`score:${userIdStr}`)) || 0
         const newBalance = current + score
-        // Сохраняем новый баланс
         await kv.set(`score:${userIdStr}`, newBalance)
 
-        // Обновляем запись в лидерборде (Sorted Set)
-        // @ts-ignore - используем sorted set команду
+        // Сохраняем имя игрока (если передано)
+        if (firstName) {
+            await kv.set(`name:${userIdStr}`, firstName)
+        }
+
+        // Обновляем лидерборд
+        // @ts-ignore
         await kv.zadd('leaderboard', { score: newBalance, member: userIdStr })
 
         return NextResponse.json({ success: true, earned: score, newBalance })
@@ -32,4 +35,4 @@ export async function GET(req: NextRequest) {
 
     const current = (await kv.get<number>(`score:${userId}`)) || 0
     return NextResponse.json({ balance: current })
-}
+        }
