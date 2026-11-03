@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// Общее хранилище очков (должно быть общим с save-score!)
-// В идеале — вынести в отдельный файл, но для простоты дублируем
-const userScores = new Map<string, number>()
-const lastClaimTimes = new Map<string, number>()
+import { kv } from '@vercel/kv'
 
 export async function POST(req: NextRequest) {
     try {
         const { userId } = await req.json()
-
-        if (!userId) {
-            return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
-        }
+        if (!userId) return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
 
         const userIdStr = userId.toString()
+        const lastClaimKey = `lastClaim:${userIdStr}`
+        const lastClaim = await kv.get<number>(lastClaimKey)
         const now = Date.now()
-        const lastClaim = lastClaimTimes.get(userIdStr)
 
         if (lastClaim) {
             const hoursSinceLastClaim = (now - lastClaim) / (1000 * 60 * 60)
@@ -30,21 +24,20 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Начисляем 100 очков
         const dailyPoints = 100
-        lastClaimTimes.set(userIdStr, now)
+        await kv.set(lastClaimKey, now)
         
-        const current = userScores.get(userIdStr) || 0
+        const scoreKey = `score:${userIdStr}`
+        const current = (await kv.get<number>(scoreKey)) || 0
         const newBalance = current + dailyPoints
-        userScores.set(userIdStr, newBalance)
+        await kv.set(scoreKey, newBalance)
 
         return NextResponse.json({
             success: true,
             points: dailyPoints,
-            newBalance: newBalance,
+            newBalance,
             message: `Вы получили ${dailyPoints} очков!`
         })
-
     } catch (error) {
         return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 })
     }
@@ -55,20 +48,13 @@ export async function GET(req: NextRequest) {
     const userId = url.searchParams.get('userId')
     if (!userId) return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
 
-    const userIdStr = userId.toString()
-    const lastClaim = lastClaimTimes.get(userIdStr)
+    const lastClaim = await kv.get<number>(`lastClaim:${userId}`)
     const now = Date.now()
 
-    if (!lastClaim) {
-        return NextResponse.json({ canClaim: true })
-    }
+    if (!lastClaim) return NextResponse.json({ canClaim: true })
 
     const hoursSinceLastClaim = (now - lastClaim) / (1000 * 60 * 60)
-    const canClaim = hoursSinceLastClaim >= 24
-
-    if (canClaim) {
-        return NextResponse.json({ canClaim: true })
-    }
+    if (hoursSinceLastClaim >= 24) return NextResponse.json({ canClaim: true })
 
     const totalMinutesRemaining = (24 - hoursSinceLastClaim) * 60
     const hoursRemaining = Math.floor(totalMinutesRemaining / 60)
