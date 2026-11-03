@@ -9,9 +9,15 @@ export async function POST(req: NextRequest) {
         }
 
         const userIdStr = userId.toString()
+        // Получаем текущий баланс
         const current = (await kv.get<number>(`score:${userIdStr}`)) || 0
         const newBalance = current + score
+        // Сохраняем новый баланс
         await kv.set(`score:${userIdStr}`, newBalance)
+
+        // Обновляем запись в лидерборде (Sorted Set)
+        // @ts-ignore - используем sorted set команду
+        await kv.zadd('leaderboard', { score: newBalance, member: userIdStr })
 
         return NextResponse.json({ success: true, earned: score, newBalance })
     } catch (error) {
