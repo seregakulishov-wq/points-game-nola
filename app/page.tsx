@@ -14,7 +14,14 @@ export default function Home() {
   const [gameState, setGameState] = useState<"idle" | "playing" | "won">("idle");
   const [timeLeft, setTimeLeft] = useState(30);
   const [balance, setBalance] = useState(0);
+  const [dailyState, setDailyState] = useState<"loading" | "available" | "claimed">("loading");
+  const [dailyTimer, setDailyTimer] = useState("");
 
+  const getUserId = () => {
+    return window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
+  };
+
+  // Загрузка баланса и статуса ежедневной награды
   useEffect(() => {
     if (typeof window !== "undefined") {
       const check = setInterval(() => {
@@ -22,10 +29,24 @@ export default function Home() {
           window.Telegram.WebApp.ready();
           clearInterval(check);
           
-          const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
+          const userId = getUserId();
+          
+          // Баланс
           fetch(`/api/save-score?userId=${userId}`)
             .then(res => res.json())
             .then(data => setBalance(data.balance || 0))
+            .catch(console.error);
+
+          // Статус ежедневной награды
+          fetch(`/api/claim-daily?userId=${userId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.canClaim) setDailyState("available");
+              else {
+                setDailyState("claimed");
+                setDailyTimer(`${data.hoursRemaining}ч ${data.minutesRemaining}м`);
+              }
+            })
             .catch(console.error);
         }
       }, 100);
@@ -33,6 +54,7 @@ export default function Home() {
     }
   }, []);
 
+  // Таймер игры
   useEffect(() => {
     if (gameState === "playing" && timeLeft > 0) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
@@ -50,9 +72,7 @@ export default function Home() {
     setTarget(Math.floor(Math.random() * 3));
   };
 
-  const newTarget = () => {
-    setTarget(Math.floor(Math.random() * 3));
-  };
+  const newTarget = () => setTarget(Math.floor(Math.random() * 3));
 
   const handleClick = (index: number) => {
     if (gameState !== "playing") return;
@@ -68,24 +88,43 @@ export default function Home() {
 
   const claimReward = async () => {
     try {
-      const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
-
+      const userId = getUserId();
       const res = await fetch("/api/save-score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, score }),
       });
-
       const data = await res.json();
-
       if (res.ok) {
         setBalance(data.newBalance);
-        alert(`✅ Успешно! Вы заработали ${score} очков! Ваш общий баланс: ${data.newBalance}`);
+        alert(`✅ Вы заработали ${score} очков! Общий баланс: ${data.newBalance}`);
         setGameState("idle");
         setScore(0);
         setCombo(0);
       } else {
-        alert(`❌ Ошибка: ${data.error || "Не удалось сохранить"}`);
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (e) {
+      alert("❌ Ошибка сети.");
+    }
+  };
+
+  const claimDaily = async () => {
+    try {
+      const userId = getUserId();
+      const res = await fetch("/api/claim-daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBalance(data.newBalance);
+        alert(`🎁 Вы получили 100 очков! Общий баланс: ${data.newBalance}`);
+        setDailyState("claimed");
+        setDailyTimer("24ч 0м");
+      } else {
+        alert(`❌ ${data.message || data.error}`);
       }
     } catch (e) {
       alert("❌ Ошибка сети.");
@@ -95,13 +134,23 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
       <h1 className="text-3xl font-bold mb-2">🎮 Combo Game</h1>
-      <p className="text-xl mb-6 text-yellow-400">Ваш баланс: {balance} очков</p>
+      <p className="text-xl mb-4 text-yellow-400">Ваш баланс: {balance} очков</p>
+
+      {/* Блок ежедневной награды */}
+      <div className="mb-6">
+        {dailyState === "loading" && <p className="text-gray-400">Загрузка награды...</p>}
+        {dailyState === "available" && (
+          <button onClick={claimDaily} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">
+            🎁 Забрать 100 очков (ежедневно)
+          </button>
+        )}
+        {dailyState === "claimed" && (
+          <p className="text-gray-400">🎁 Следующая награда через: {dailyTimer}</p>
+        )}
+      </div>
 
       {gameState === "idle" && (
-        <button
-          onClick={startGame}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl"
-        >
+        <button onClick={startGame} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">
           Начать игру
         </button>
       )}
@@ -111,7 +160,6 @@ export default function Home() {
           <p className="text-xl mb-2">⏱️ Время: {timeLeft} сек</p>
           <p className="text-xl mb-2">Комбо: {combo} 🔥</p>
           <p className="text-xl mb-8">Очки за раунд: {score}</p>
-
           <div className="flex gap-4">
             {[0, 1, 2].map((i) => (
               <button
@@ -132,10 +180,7 @@ export default function Home() {
         <div className="text-center">
           <h2 className="text-2xl text-red-500 mb-4">Время вышло!</h2>
           <p className="text-xl mb-6">Ваш счёт за раунд: {score} очков</p>
-          <button
-            onClick={claimReward}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
-          >
+          <button onClick={claimReward} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg">
             Забрать награду
           </button>
         </div>
