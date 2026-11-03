@@ -17,9 +17,10 @@ export default function Home() {
   const [dailyState, setDailyState] = useState<"loading" | "available" | "claimed">("loading");
   const [dailyTimer, setDailyTimer] = useState("");
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [leaderboard, setLeaderboard] = useState<{ userId: string; score: number }[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; score: number }[]>([]);
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
+  const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -34,7 +35,6 @@ export default function Home() {
             if (data.canClaim) setDailyState("available");
             else { setDailyState("claimed"); setDailyTimer(`${data.hoursRemaining}ч ${data.minutesRemaining}м`); }
           });
-          // Загружаем лидерборд
           fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
         }
       }, 100);
@@ -66,13 +66,13 @@ export default function Home() {
   const claimReward = async () => {
     try {
       const userId = getUserId();
-      const res = await fetch("/api/save-score", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, score }) });
+      const firstName = getFirstName();
+      const res = await fetch("/api/save-score", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, score, firstName }) });
       const data = await res.json();
       if (res.ok) {
         setBalance(data.newBalance);
         alert(`✅ Вы заработали ${score} очков! Общий баланс: ${data.newBalance}`);
         setGameState("idle"); setScore(0); setCombo(0);
-        // Обновляем лидерборд
         fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
       } else { alert(`❌ Ошибка: ${data.error}`); }
     } catch (e) { alert("❌ Ошибка сети."); }
@@ -87,7 +87,6 @@ export default function Home() {
         setBalance(data.newBalance);
         alert(`🎁 Вы получили 100 очков! Общий баланс: ${data.newBalance}`);
         setDailyState("claimed"); setDailyTimer("24ч 0м");
-        // Обновляем лидерборд
         fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
       } else { alert(`❌ ${data.message || data.error}`); }
     } catch (e) { alert("❌ Ошибка сети."); }
@@ -106,7 +105,7 @@ export default function Home() {
             {leaderboard.map((player, index) => (
               <div key={player.userId} className="flex justify-between items-center bg-gray-800 p-3 rounded-lg">
                 <span className="font-bold text-lg">#{index + 1}</span>
-                <span className="text-gray-300">ID: {player.userId}</span>
+                <span className="text-gray-300">{player.name}</span>
                 <span className="text-yellow-400 font-bold">{player.score}</span>
               </div>
             ))}
@@ -156,4 +155,4 @@ export default function Home() {
       )}
     </main>
   );
-  }
+          }
