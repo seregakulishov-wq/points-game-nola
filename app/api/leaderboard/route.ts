@@ -3,17 +3,18 @@ import { kv } from '@vercel/kv'
 
 export async function GET() {
     try {
-        // Получаем топ-10 игроков с их очками
-        // @ts-ignore - используем sorted set команду
+        // @ts-ignore
         const topPlayers = await kv.zrange('leaderboard', 0, 9, { rev: true, withScores: true })
 
-        // Преобразуем плоский массив [player1, score1, player2, score2...] в объекты
         const players = []
         for (let i = 0; i < topPlayers.length; i += 2) {
-            players.push({
-                userId: topPlayers[i],
-                score: Number(topPlayers[i + 1])
-            })
+            const userId = topPlayers[i] as string
+            const score = Number(topPlayers[i + 1])
+            
+            // Получаем имя игрока
+            const name = (await kv.get<string>(`name:${userId}`)) || `ID: ${userId}`
+
+            players.push({ userId, name, score })
         }
 
         return NextResponse.json({ players })
