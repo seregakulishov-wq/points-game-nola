@@ -109,6 +109,29 @@ export default function Home() {
     } catch (e) { alert("❌ Ошибка сети."); }
   };
 
+  const claimQuestReward = async () => {
+    try {
+      const userId = getUserId();
+      const firstName = getFirstName();
+      const res = await fetch("/api/save-score", { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ userId, score: 500, firstName }) 
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBalance(data.newBalance);
+        alert(`🎁 Вы получили 500 очков за квест! Общий баланс: ${data.newBalance}`);
+        setRoundsPlayed(0);
+        fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
+      } else {
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (e) {
+      alert("❌ Ошибка сети.");
+    }
+  };
+
   const getMedal = (index: number) => {
     if (index === 0) return "🥇";
     if (index === 1) return "🥈";
@@ -158,7 +181,14 @@ export default function Home() {
                 <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${Math.min(roundsPlayed / 3 * 100, 100)}%` }}></div>
               </div>
               <p className="text-xs text-gray-400 mt-1">{roundsPlayed}/3</p>
-              {roundsPlayed >= 3 && <p className="text-green-400 text-sm mt-1">Квест выполнен! (Награда: +500 очков)</p>}
+              {roundsPlayed >= 3 && (
+                <button 
+                  onClick={claimQuestReward} 
+                  className="mt-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded-lg"
+                >
+                  🎁 Забрать 500 очков
+                </button>
+              )}
             </div>
           </div>
 
@@ -195,4 +225,4 @@ export default function Home() {
       )}
     </main>
   );
-            }
+                                                        }
