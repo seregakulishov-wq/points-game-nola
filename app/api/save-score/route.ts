@@ -9,20 +9,30 @@ export async function POST(req: NextRequest) {
         }
 
         const userIdStr = userId.toString()
+        
+        // Проверяем буст
+        const boostEnd = await kv.get<number>(`boost:${userIdStr}`)
+        const now = Date.now()
+        const hasBoost = boostEnd && boostEnd > now
+        const finalScore = hasBoost ? score * 2 : score
+
         const current = (await kv.get<number>(`score:${userIdStr}`)) || 0
-        const newBalance = current + score
+        const newBalance = current + finalScore
         await kv.set(`score:${userIdStr}`, newBalance)
 
-        // Сохраняем имя игрока (если передано)
         if (firstName) {
             await kv.set(`name:${userIdStr}`, firstName)
         }
 
-        // Обновляем лидерборд
         // @ts-ignore
         await kv.zadd('leaderboard', { score: newBalance, member: userIdStr })
 
-        return NextResponse.json({ success: true, earned: score, newBalance })
+        return NextResponse.json({ 
+            success: true, 
+            earned: finalScore, 
+            newBalance,
+            boostApplied: hasBoost
+        })
     } catch (error) {
         return NextResponse.json({ error: 'Failed to save score' }, { status: 500 })
     }
@@ -35,4 +45,4 @@ export async function GET(req: NextRequest) {
 
     const current = (await kv.get<number>(`score:${userId}`)) || 0
     return NextResponse.json({ balance: current })
-        }
+}
