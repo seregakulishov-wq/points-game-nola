@@ -18,6 +18,8 @@ export default function Home() {
   const [dailyTimer, setDailyTimer] = useState("");
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; score: number }[]>([]);
+  const [boostActive, setBoostActive] = useState(false);
+  const [boostMinutes, setBoostMinutes] = useState(0);
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
@@ -36,6 +38,9 @@ export default function Home() {
             else { setDailyState("claimed"); setDailyTimer(`${data.hoursRemaining}ч ${data.minutesRemaining}м`); }
           });
           fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
+          fetch(`/api/buy-boost?userId=${userId}`).then(res => res.json()).then(data => {
+            if (data.active) { setBoostActive(true); setBoostMinutes(data.minutesLeft); }
+          });
         }
       }, 100);
       return () => clearInterval(check);
@@ -71,7 +76,7 @@ export default function Home() {
       const data = await res.json();
       if (res.ok) {
         setBalance(data.newBalance);
-        alert(`✅ Вы заработали ${score} очков! Общий баланс: ${data.newBalance}`);
+        alert(`✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}${data.boostApplied ? ' (с бустом x2)' : ''}`);
         setGameState("idle"); setScore(0); setCombo(0);
         fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
       } else { alert(`❌ Ошибка: ${data.error}`); }
@@ -92,10 +97,27 @@ export default function Home() {
     } catch (e) { alert("❌ Ошибка сети."); }
   };
 
+  const buyBoost = async () => {
+    try {
+      const userId = getUserId();
+      const res = await fetch("/api/buy-boost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, boostType: 'x2' }) });
+      const data = await res.json();
+      if (res.ok) {
+        setBoostActive(true);
+        setBoostMinutes(5);
+        alert(`🚀 Буст активирован! x2 очков на 5 минут.`);
+      } else { alert(`❌ ${data.error}`); }
+    } catch (e) { alert("❌ Ошибка сети."); }
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
       <h1 className="text-3xl font-bold mb-2">🎮 Combo Game</h1>
       <p className="text-xl mb-4 text-yellow-400">Ваш баланс: {balance} очков</p>
+
+      {boostActive && (
+        <p className="text-green-400 mb-2">🚀 Буст x2 активен: {boostMinutes} мин</p>
+      )}
 
       {showLeaderboard ? (
         <div className="w-full max-w-md">
@@ -114,12 +136,16 @@ export default function Home() {
         </div>
       ) : (
         <>
-          <div className="mb-6">
+          <div className="mb-6 flex flex-col items-center gap-2">
             {dailyState === "loading" && <p className="text-gray-400">Загрузка награды...</p>}
             {dailyState === "available" && (
               <button onClick={claimDaily} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">🎁 Забрать 100 очков (ежедневно)</button>
             )}
             {dailyState === "claimed" && <p className="text-gray-400">🎁 Следующая награда через: {dailyTimer}</p>}
+            
+            {!boostActive && (
+              <button onClick={buyBoost} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg">🚀 Купить буст x2 (10 Stars)</button>
+            )}
           </div>
 
           {gameState === "idle" && (
@@ -155,4 +181,4 @@ export default function Home() {
       )}
     </main>
   );
-          }
+}
