@@ -23,13 +23,17 @@ export default function Home() {
   const [roundsPlayed, setRoundsPlayed] = useState(0);
   const [timeBoostActive, setTimeBoostActive] = useState(false);
   const [timeBoostSeconds, setTimeBoostSeconds] = useState(0);
+  const [streak, setStreak] = useState(0);
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
 
   const fetchData = () => {
     const userId = getUserId();
-    fetch(`/api/save-score?userId=${userId}`).then(res => res.json()).then(data => setBalance(data.balance || 0));
+    fetch(`/api/save-score?userId=${userId}`).then(res => res.json()).then(data => {
+      setBalance(data.balance || 0);
+      setStreak(data.streak || 0);
+    });
     fetch(`/api/claim-daily?userId=${userId}`).then(res => res.json()).then(data => {
       if (data.canClaim) setDailyState("available");
       else { setDailyState("claimed"); setDailyTimer(`${data.hoursRemaining}ч ${data.minutesRemaining}м`); }
@@ -86,7 +90,13 @@ export default function Home() {
       const data = await res.json();
       if (res.ok) {
         setBalance(data.newBalance);
-        alert(`✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}${data.boostApplied ? ' (с бустом x2)' : ''}`);
+        setStreak(data.streak);
+        
+        let msg = `✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}`;
+        if (data.boostApplied) msg += ' (с бустом x2)';
+        if (data.dailyBonus > 0) msg += `\n🎁 Бонус за вход: +${data.dailyBonus} (День ${data.streak})`;
+        
+        alert(msg);
         setGameState("idle"); setScore(0); setCombo(0);
         fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
       } else { alert(`❌ Ошибка: ${data.error}`); }
@@ -161,7 +171,11 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
       <h1 className="text-3xl font-bold mb-2">🎮 Combo Game</h1>
-      <p className="text-xl mb-4 text-yellow-400">Ваш баланс: {balance} очков</p>
+      
+      <div className="text-center mb-4">
+        <p className="text-xl text-yellow-400">Ваш баланс: {balance} очков</p>
+        {streak > 0 && <p className="text-sm text-green-400 mt-1">🔥 Серия входов: {streak} дн.</p>}
+      </div>
 
       {boostActive && <p className="text-green-400 mb-2">🚀 Буст x2 активен: {boostMinutes} мин</p>}
       {timeBoostActive && <p className="text-blue-400 mb-2">⏱️ Буст времени: +10 сек</p>}
