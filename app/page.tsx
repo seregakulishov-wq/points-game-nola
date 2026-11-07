@@ -21,9 +21,27 @@ export default function Home() {
   const [boostActive, setBoostActive] = useState(false);
   const [boostMinutes, setBoostMinutes] = useState(0);
   const [roundsPlayed, setRoundsPlayed] = useState(0);
+  const [timeBoostActive, setTimeBoostActive] = useState(false);
+  const [timeBoostSeconds, setTimeBoostSeconds] = useState(0);
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
+
+  const fetchData = () => {
+    const userId = getUserId();
+    fetch(`/api/save-score?userId=${userId}`).then(res => res.json()).then(data => setBalance(data.balance || 0));
+    fetch(`/api/claim-daily?userId=${userId}`).then(res => res.json()).then(data => {
+      if (data.canClaim) setDailyState("available");
+      else { setDailyState("claimed"); setDailyTimer(`${data.hoursRemaining}ч ${data.minutesRemaining}м`); }
+    });
+    fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
+    fetch(`/api/buy-boost?userId=${userId}`).then(res => res.json()).then(data => {
+      if (data.active) { setBoostActive(true); setBoostMinutes(data.minutesLeft); }
+    });
+    fetch(`/api/buy-time?userId=${userId}`).then(res => res.json()).then(data => {
+      if (data.active) { setTimeBoostActive(true); setTimeBoostSeconds(data.secondsLeft); }
+    });
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -31,17 +49,7 @@ export default function Home() {
         if (window.Telegram?.WebApp) {
           window.Telegram.WebApp.ready();
           clearInterval(check);
-          
-          const userId = getUserId();
-          fetch(`/api/save-score?userId=${userId}`).then(res => res.json()).then(data => setBalance(data.balance || 0));
-          fetch(`/api/claim-daily?userId=${userId}`).then(res => res.json()).then(data => {
-            if (data.canClaim) setDailyState("available");
-            else { setDailyState("claimed"); setDailyTimer(`${data.hoursRemaining}ч ${data.minutesRemaining}м`); }
-          });
-          fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
-          fetch(`/api/buy-boost?userId=${userId}`).then(res => res.json()).then(data => {
-            if (data.active) { setBoostActive(true); setBoostMinutes(data.minutesLeft); }
-          });
+          fetchData();
         }
       }, 100);
       return () => clearInterval(check);
@@ -109,6 +117,21 @@ export default function Home() {
     } catch (e) { alert("❌ Ошибка сети."); }
   };
 
+  const buyTimeBoost = async () => {
+    try {
+      const userId = getUserId();
+      const res = await fetch("/api/buy-time", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
+      const data = await res.json();
+      if (res.ok) { 
+        setTimeBoostActive(true); 
+        setTimeBoostSeconds(10);
+        setTimeLeft(prev => prev + 10);
+        alert(`⏱️ +10 секунд к таймеру!`); 
+      }
+      else { alert(`❌ ${data.error}`); }
+    } catch (e) { alert("❌ Ошибка сети."); }
+  };
+
   const claimQuestReward = async () => {
     try {
       const userId = getUserId();
@@ -124,12 +147,8 @@ export default function Home() {
         alert(`🎁 Вы получили 500 очков за квест! Общий баланс: ${data.newBalance}`);
         setRoundsPlayed(0);
         fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
-      } else {
-        alert(`❌ Ошибка: ${data.error}`);
-      }
-    } catch (e) {
-      alert("❌ Ошибка сети.");
-    }
+      } else { alert(`❌ Ошибка: ${data.error}`); }
+    } catch (e) { alert("❌ Ошибка сети."); }
   };
 
   const getMedal = (index: number) => {
@@ -145,6 +164,7 @@ export default function Home() {
       <p className="text-xl mb-4 text-yellow-400">Ваш баланс: {balance} очков</p>
 
       {boostActive && <p className="text-green-400 mb-2">🚀 Буст x2 активен: {boostMinutes} мин</p>}
+      {timeBoostActive && <p className="text-blue-400 mb-2">⏱️ Буст времени: +10 сек</p>}
 
       {showLeaderboard ? (
         <div className="w-full max-w-md">
@@ -170,9 +190,14 @@ export default function Home() {
             )}
             {dailyState === "claimed" && <p className="text-gray-400">🎁 Следующая награда через: {dailyTimer}</p>}
             
-            {!boostActive && (
-              <button onClick={buyBoost} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg">🚀 Купить буст x2 (10 Stars)</button>
-            )}
+            <div className="flex gap-2">
+              {!boostActive && (
+                <button onClick={buyBoost} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg">🚀 Буст x2 (10 Stars)</button>
+              )}
+              {!timeBoostActive && (
+                <button onClick={buyTimeBoost} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">⏱️ +10 сек (5 Stars)</button>
+              )}
+            </div>
 
             {/* Ежедневный квест */}
             <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
@@ -196,6 +221,7 @@ export default function Home() {
             <div className="flex flex-col gap-4">
               <button onClick={startGame} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">Начать игру</button>
               <button onClick={() => setShowLeaderboard(true)} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">🏆 Лидерборд</button>
+              <button onClick={fetchData} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm">🔄 Обновить данные</button>
             </div>
           )}
 
@@ -225,4 +251,4 @@ export default function Home() {
       )}
     </main>
   );
-                                                        }
+}
