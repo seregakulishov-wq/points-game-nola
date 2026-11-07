@@ -20,6 +20,7 @@ export default function Home() {
   const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; score: number }[]>([]);
   const [boostActive, setBoostActive] = useState(false);
   const [boostMinutes, setBoostMinutes] = useState(0);
+  const [roundsPlayed, setRoundsPlayed] = useState(0);
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
@@ -53,6 +54,7 @@ export default function Home() {
       return () => clearTimeout(timer);
     } else if (timeLeft === 0 && gameState === "playing") {
       setGameState("won");
+      setRoundsPlayed(prev => prev + 1);
     }
   }, [gameState, timeLeft]);
 
@@ -65,7 +67,7 @@ export default function Home() {
       setCombo(newCombo);
       setScore(score + 10 * newCombo);
       newTarget();
-    } else { setGameState("won"); }
+    } else { setGameState("won"); setRoundsPlayed(prev => prev + 1); }
   };
 
   const claimReward = async () => {
@@ -102,12 +104,16 @@ export default function Home() {
       const userId = getUserId();
       const res = await fetch("/api/buy-boost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, boostType: 'x2' }) });
       const data = await res.json();
-      if (res.ok) {
-        setBoostActive(true);
-        setBoostMinutes(5);
-        alert(`🚀 Буст активирован! x2 очков на 5 минут.`);
-      } else { alert(`❌ ${data.error}`); }
+      if (res.ok) { setBoostActive(true); setBoostMinutes(5); alert(`🚀 Буст активирован! x2 очков на 5 минут.`); }
+      else { alert(`❌ ${data.error}`); }
     } catch (e) { alert("❌ Ошибка сети."); }
+  };
+
+  const getMedal = (index: number) => {
+    if (index === 0) return "🥇";
+    if (index === 1) return "🥈";
+    if (index === 2) return "🥉";
+    return `#${index + 1}`;
   };
 
   return (
@@ -115,9 +121,7 @@ export default function Home() {
       <h1 className="text-3xl font-bold mb-2">🎮 Combo Game</h1>
       <p className="text-xl mb-4 text-yellow-400">Ваш баланс: {balance} очков</p>
 
-      {boostActive && (
-        <p className="text-green-400 mb-2">🚀 Буст x2 активен: {boostMinutes} мин</p>
-      )}
+      {boostActive && <p className="text-green-400 mb-2">🚀 Буст x2 активен: {boostMinutes} мин</p>}
 
       {showLeaderboard ? (
         <div className="w-full max-w-md">
@@ -126,8 +130,8 @@ export default function Home() {
           <div className="space-y-2">
             {leaderboard.map((player, index) => (
               <div key={player.userId} className="flex justify-between items-center bg-gray-800 p-3 rounded-lg">
-                <span className="font-bold text-lg">#{index + 1}</span>
-                <span className="text-gray-300">{player.name}</span>
+                <span className="font-bold text-lg w-12 text-center">{getMedal(index)}</span>
+                <span className="text-gray-300 flex-1">{player.name}</span>
                 <span className="text-yellow-400 font-bold">{player.score}</span>
               </div>
             ))}
@@ -146,6 +150,16 @@ export default function Home() {
             {!boostActive && (
               <button onClick={buyBoost} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg">🚀 Купить буст x2 (10 Stars)</button>
             )}
+
+            {/* Ежедневный квест */}
+            <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
+              <p className="text-sm text-gray-300 mb-1">🎯 Квест: Сыграй 3 раунда</p>
+              <div className="w-full bg-gray-700 rounded-full h-2.5">
+                <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${Math.min(roundsPlayed / 3 * 100, 100)}%` }}></div>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{roundsPlayed}/3</p>
+              {roundsPlayed >= 3 && <p className="text-green-400 text-sm mt-1">Квест выполнен! (Награда: +500 очков)</p>}
+            </div>
           </div>
 
           {gameState === "idle" && (
@@ -181,4 +195,4 @@ export default function Home() {
       )}
     </main>
   );
-}
+            }
