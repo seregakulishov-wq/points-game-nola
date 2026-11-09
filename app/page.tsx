@@ -25,8 +25,6 @@ export default function Home() {
   const [timeBoostActive, setTimeBoostActive] = useState(false);
   const [timeBoostSeconds, setTimeBoostSeconds] = useState(0);
   const [streak, setStreak] = useState(0);
-  
-  // Состояния для профиля
   const [profileData, setProfileData] = useState({ name: "", totalRounds: 0, bestRound: 0 });
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
@@ -96,9 +94,14 @@ export default function Home() {
       if (res.ok) {
         setBalance(data.newBalance);
         setStreak(data.streak);
+        
         let msg = `✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}`;
         if (data.boostApplied) msg += ' (с бустом x2)';
         if (data.dailyBonus > 0) msg += `\n🎁 Бонус за вход: +${data.dailyBonus} (День ${data.streak})`;
+        if (data.achievements && data.achievements.length > 0) {
+          msg += `\n\n🏆 Достижения:\n${data.achievements.join('\n')}\n+${data.achBonus} очков!`;
+        }
+        
         alert(msg);
         setGameState("idle"); setScore(0); setCombo(0);
         fetchData();
