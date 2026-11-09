@@ -17,6 +17,7 @@ export default function Home() {
   const [dailyState, setDailyState] = useState<"loading" | "available" | "claimed">("loading");
   const [dailyTimer, setDailyTimer] = useState("");
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; score: number }[]>([]);
   const [boostActive, setBoostActive] = useState(false);
   const [boostMinutes, setBoostMinutes] = useState(0);
@@ -24,6 +25,9 @@ export default function Home() {
   const [timeBoostActive, setTimeBoostActive] = useState(false);
   const [timeBoostSeconds, setTimeBoostSeconds] = useState(0);
   const [streak, setStreak] = useState(0);
+  
+  // Состояния для профиля
+  const [profileData, setProfileData] = useState({ name: "", totalRounds: 0, bestRound: 0 });
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
@@ -33,6 +37,7 @@ export default function Home() {
     fetch(`/api/save-score?userId=${userId}`).then(res => res.json()).then(data => {
       setBalance(data.balance || 0);
       setStreak(data.streak || 0);
+      setProfileData({ name: data.name, totalRounds: data.totalRounds, bestRound: data.bestRound });
     });
     fetch(`/api/claim-daily?userId=${userId}`).then(res => res.json()).then(data => {
       if (data.canClaim) setDailyState("available");
@@ -91,14 +96,12 @@ export default function Home() {
       if (res.ok) {
         setBalance(data.newBalance);
         setStreak(data.streak);
-        
         let msg = `✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}`;
         if (data.boostApplied) msg += ' (с бустом x2)';
         if (data.dailyBonus > 0) msg += `\n🎁 Бонус за вход: +${data.dailyBonus} (День ${data.streak})`;
-        
         alert(msg);
         setGameState("idle"); setScore(0); setCombo(0);
-        fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
+        fetchData();
       } else { alert(`❌ Ошибка: ${data.error}`); }
     } catch (e) { alert("❌ Ошибка сети."); }
   };
@@ -112,7 +115,7 @@ export default function Home() {
         setBalance(data.newBalance);
         alert(`🎁 Вы получили 100 очков! Общий баланс: ${data.newBalance}`);
         setDailyState("claimed"); setDailyTimer("24ч 0м");
-        fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
+        fetchData();
       } else { alert(`❌ ${data.message || data.error}`); }
     } catch (e) { alert("❌ Ошибка сети."); }
   };
@@ -156,7 +159,7 @@ export default function Home() {
         setBalance(data.newBalance);
         alert(`🎁 Вы получили 500 очков за квест! Общий баланс: ${data.newBalance}`);
         setRoundsPlayed(0);
-        fetch('/api/leaderboard').then(res => res.json()).then(data => setLeaderboard(data.players || []));
+        fetchData();
       } else { alert(`❌ Ошибка: ${data.error}`); }
     } catch (e) { alert("❌ Ошибка сети."); }
   };
@@ -180,7 +183,19 @@ export default function Home() {
       {boostActive && <p className="text-green-400 mb-2">🚀 Буст x2 активен: {boostMinutes} мин</p>}
       {timeBoostActive && <p className="text-blue-400 mb-2">⏱️ Буст времени: +10 сек</p>}
 
-      {showLeaderboard ? (
+      {showProfile ? (
+        <div className="w-full max-w-md">
+          <button onClick={() => setShowProfile(false)} className="mb-4 bg-gray-700 px-4 py-2 rounded-lg">← Назад к игре</button>
+          <h2 className="text-2xl font-bold mb-4 text-center">👤 Профиль игрока</h2>
+          <div className="bg-gray-800 p-4 rounded-lg space-y-3">
+            <p className="text-lg"><span className="text-gray-400">Имя:</span> {profileData.name}</p>
+            <p className="text-lg"><span className="text-gray-400">Баланс:</span> {balance} очков</p>
+            <p className="text-lg"><span className="text-gray-400">Серия входов:</span> {streak} дн.</p>
+            <p className="text-lg"><span className="text-gray-400">Всего раундов:</span> {profileData.totalRounds}</p>
+            <p className="text-lg"><span className="text-gray-400">Лучший результат:</span> {profileData.bestRound} очков</p>
+          </div>
+        </div>
+      ) : showLeaderboard ? (
         <div className="w-full max-w-md">
           <button onClick={() => setShowLeaderboard(false)} className="mb-4 bg-gray-700 px-4 py-2 rounded-lg">← Назад к игре</button>
           <h2 className="text-2xl font-bold mb-4 text-center">🏆 Топ игроков</h2>
@@ -213,7 +228,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* Ежедневный квест */}
             <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
               <p className="text-sm text-gray-300 mb-1">🎯 Квест: Сыграй 3 раунда</p>
               <div className="w-full bg-gray-700 rounded-full h-2.5">
@@ -221,12 +235,7 @@ export default function Home() {
               </div>
               <p className="text-xs text-gray-400 mt-1">{roundsPlayed}/3</p>
               {roundsPlayed >= 3 && (
-                <button 
-                  onClick={claimQuestReward} 
-                  className="mt-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded-lg"
-                >
-                  🎁 Забрать 500 очков
-                </button>
+                <button onClick={claimQuestReward} className="mt-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded-lg">🎁 Забрать 500 очков</button>
               )}
             </div>
           </div>
@@ -234,7 +243,10 @@ export default function Home() {
           {gameState === "idle" && (
             <div className="flex flex-col gap-4">
               <button onClick={startGame} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">Начать игру</button>
-              <button onClick={() => setShowLeaderboard(true)} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">🏆 Лидерборд</button>
+              <div className="flex gap-2 justify-center">
+                <button onClick={() => setShowLeaderboard(true)} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">🏆 Лидерборд</button>
+                <button onClick={() => setShowProfile(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">👤 Профиль</button>
+              </div>
               <button onClick={fetchData} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm">🔄 Обновить данные</button>
             </div>
           )}
