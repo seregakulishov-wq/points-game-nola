@@ -28,6 +28,11 @@ export default function Home() {
   const [timeBoostSeconds, setTimeBoostSeconds] = useState(0);
   const [streak, setStreak] = useState(0);
   const [profileData, setProfileData] = useState({ name: "", totalRounds: 0, bestRound: 0 });
+  
+  // Новые состояния для квестов
+  const [quest, setQuest] = useState<{ id: string; title: string; reward: number; type: string; target: number } | null>(null);
+  const [questProgress, setQuestProgress] = useState(0);
+  const [questCompleted, setQuestCompleted] = useState(false);
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
@@ -52,6 +57,14 @@ export default function Home() {
     });
     fetch(`/api/buy-combo?userId=${userId}`).then(res => res.json()).then(data => {
       if (data.active) { setComboBoostActive(true); setComboBoostMinutes(data.minutesLeft); }
+    });
+    // Загрузка квеста
+    fetch(`/api/quests?userId=${userId}`).then(res => res.json()).then(data => {
+      if (data.quest) {
+        setQuest(data.quest);
+        setQuestProgress(data.progress || 0);
+        setQuestCompleted(data.isCompleted || false);
+      }
     });
   };
 
@@ -86,9 +99,7 @@ export default function Home() {
       const newCombo = combo + 1;
       setCombo(newCombo);
       let points = 10 * newCombo;
-      if (comboBoostActive) {
-        points = Math.floor(points * 1.5);
-      }
+      if (comboBoostActive) points = Math.floor(points * 1.5);
       setScore(score + points);
       newTarget();
     } else { setGameState("won"); setRoundsPlayed(prev => prev + 1); }
@@ -104,6 +115,24 @@ export default function Home() {
         setBalance(data.newBalance);
         setStreak(data.streak);
         
+        // Обновляем прогресс квеста
+        await fetch("/api/quests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, questType: 'rounds', value: 1 })
+        });
+        // Отправляем счёт за раунд и комбо для квестов типа 'score' и 'combo'
+        await fetch("/api/quests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, questType: 'score', value: score })
+        });
+        await fetch("/api/quests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, questType: 'combo', value: combo })
+        });
+
         let msg = `✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}`;
         if (data.boostApplied) msg += ' (с бустом x2)';
         if (data.comboBoostApplied) msg += ' (с бустом комбо +50%)';
@@ -175,19 +204,19 @@ export default function Home() {
   const claimQuestReward = async () => {
     try {
       const userId = getUserId();
-      const firstName = getFirstName();
-      const res = await fetch("/api/save-score", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ userId, score: 500, firstName }) 
+      const res = await fetch("/api/quests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, questType: quest?.type, value: questProgress })
       });
       const data = await res.json();
-      if (res.ok) {
+      if (data.completed) {
         setBalance(data.newBalance);
-        alert(`🎁 Вы получили 500 очков за квест! Общий баланс: ${data.newBalance}`);
-        setRoundsPlayed(0);
+        alert(`🎁 Вы получили ${data.reward} очков за квест! Общий баланс: ${data.newBalance}`);
         fetchData();
-      } else { alert(`❌ Ошибка: ${data.error}`); }
+      } else {
+        alert("❌ Квест ещё не выполнен.");
+      }
     } catch (e) { alert("❌ Ошибка сети."); }
   };
 
@@ -259,16 +288,20 @@ export default function Home() {
               )}
             </div>
 
-            <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
-              <p className="text-sm text-gray-300 mb-1">🎯 Квест: Сыграй 3 раунда</p>
-              <div className="w-full bg-gray-700 rounded-full h-2.5">
-                <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${Math.min(roundsPlayed / 3 * 100, 100)}%` }}></div>
+            {/* Ежедневный квест */}
+            {quest && (
+              <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
+                <p className="text-sm text-gray-300 mb-1">🎯 {quest.title}</p>
+                <div className="w-full bg-gray-700 rounded-full h-2.5">
+                  <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${Math.min(questProgress / quest.target * 100, 100)}%` }}></div>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">{questProgress}/{quest.target}</p>
+                {questProgress >= quest.target && !questCompleted && (
+                  <button onClick={claimQuestReward} className="mt-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded-lg">🎁 Забрать {quest.reward} очков</button>
+                )}
+                {questCompleted && <p className="text-green-400 text-sm mt-1">✅ Квест выполнен</p>}
               </div>
-              <p className="text-xs text-gray-400 mt-1">{roundsPlayed}/3</p>
-              {roundsPlayed >= 3 && (
-                <button onClick={claimQuestReward} className="mt-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded-lg">🎁 Забрать 500 очков</button>
-              )}
-            </div>
+            )}
           </div>
 
           {gameState === "idle" && (
