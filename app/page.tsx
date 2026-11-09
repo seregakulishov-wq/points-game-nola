@@ -21,6 +21,8 @@ export default function Home() {
   const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; score: number }[]>([]);
   const [boostActive, setBoostActive] = useState(false);
   const [boostMinutes, setBoostMinutes] = useState(0);
+  const [comboBoostActive, setComboBoostActive] = useState(false);
+  const [comboBoostMinutes, setComboBoostMinutes] = useState(0);
   const [roundsPlayed, setRoundsPlayed] = useState(0);
   const [timeBoostActive, setTimeBoostActive] = useState(false);
   const [timeBoostSeconds, setTimeBoostSeconds] = useState(0);
@@ -47,6 +49,9 @@ export default function Home() {
     });
     fetch(`/api/buy-time?userId=${userId}`).then(res => res.json()).then(data => {
       if (data.active) { setTimeBoostActive(true); setTimeBoostSeconds(data.secondsLeft); }
+    });
+    fetch(`/api/buy-combo?userId=${userId}`).then(res => res.json()).then(data => {
+      if (data.active) { setComboBoostActive(true); setComboBoostMinutes(data.minutesLeft); }
     });
   };
 
@@ -80,7 +85,11 @@ export default function Home() {
     if (index === target) {
       const newCombo = combo + 1;
       setCombo(newCombo);
-      setScore(score + 10 * newCombo);
+      let points = 10 * newCombo;
+      if (comboBoostActive) {
+        points = Math.floor(points * 1.5);
+      }
+      setScore(score + points);
       newTarget();
     } else { setGameState("won"); setRoundsPlayed(prev => prev + 1); }
   };
@@ -97,6 +106,7 @@ export default function Home() {
         
         let msg = `✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}`;
         if (data.boostApplied) msg += ' (с бустом x2)';
+        if (data.comboBoostApplied) msg += ' (с бустом комбо +50%)';
         if (data.dailyBonus > 0) msg += `\n🎁 Бонус за вход: +${data.dailyBonus} (День ${data.streak})`;
         if (data.achievements && data.achievements.length > 0) {
           msg += `\n\n🏆 Достижения:\n${data.achievements.join('\n')}\n+${data.achBonus} очков!`;
@@ -148,6 +158,20 @@ export default function Home() {
     } catch (e) { alert("❌ Ошибка сети."); }
   };
 
+  const buyComboBoost = async () => {
+    try {
+      const userId = getUserId();
+      const res = await fetch("/api/buy-combo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
+      const data = await res.json();
+      if (res.ok) { 
+        setComboBoostActive(true); 
+        setComboBoostMinutes(5);
+        alert(`💥 Буст комбо активирован! +50% к очкам за комбо на 5 минут.`); 
+      }
+      else { alert(`❌ ${data.error}`); }
+    } catch (e) { alert("❌ Ошибка сети."); }
+  };
+
   const claimQuestReward = async () => {
     try {
       const userId = getUserId();
@@ -185,6 +209,7 @@ export default function Home() {
 
       {boostActive && <p className="text-green-400 mb-2">🚀 Буст x2 активен: {boostMinutes} мин</p>}
       {timeBoostActive && <p className="text-blue-400 mb-2">⏱️ Буст времени: +10 сек</p>}
+      {comboBoostActive && <p className="text-pink-400 mb-2">💥 Буст комбо +50%: {comboBoostMinutes} мин</p>}
 
       {showProfile ? (
         <div className="w-full max-w-md">
@@ -222,12 +247,15 @@ export default function Home() {
             )}
             {dailyState === "claimed" && <p className="text-gray-400">🎁 Следующая награда через: {dailyTimer}</p>}
             
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap justify-center">
               {!boostActive && (
-                <button onClick={buyBoost} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg">🚀 Буст x2 (10 Stars)</button>
+                <button onClick={buyBoost} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg text-sm">🚀 Буст x2 (10 Stars)</button>
               )}
               {!timeBoostActive && (
-                <button onClick={buyTimeBoost} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">⏱️ +10 сек (5 Stars)</button>
+                <button onClick={buyTimeBoost} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">⏱️ +10 сек (5 Stars)</button>
+              )}
+              {!comboBoostActive && (
+                <button onClick={buyComboBoost} className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded-lg text-sm">💥 Буст комбо (15 Stars)</button>
               )}
             </div>
 
