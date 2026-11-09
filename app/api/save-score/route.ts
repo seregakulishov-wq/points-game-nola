@@ -16,37 +16,43 @@ export async function POST(req: NextRequest) {
         let dailyBonus = 0
         let streak = 0
 
-        // Проверяем ежедневный вход (раз в 24 часа)
+        // Ежедневный вход
         if (!lastLogin || (now - lastLogin) > 24 * 60 * 60 * 1000) {
-            // Если заходил вчера или сегодня первый раз — даем бонус
             const lastStreakKey = `streak:${userIdStr}`
             const currentStreak = await kv.get<number>(lastStreakKey) || 0
-            
-            // Проверяем, был ли он вчера (в пределах 48 часов)
             if (lastLogin && (now - lastLogin) < 48 * 60 * 60 * 1000) {
                 streak = currentStreak + 1
             } else {
                 streak = 1
             }
-            
-            // Бонус растет с каждым днем: 50, 100, 150, 200, 250 (макс)
             dailyBonus = Math.min(50 * streak, 250)
-            
             await kv.set(lastLoginKey, now)
             await kv.set(lastStreakKey, streak)
         } else {
-            // Если заходил меньше 24 часов назад, просто берем текущий стрик
             streak = await kv.get<number>(`streak:${userIdStr}`) || 1
         }
 
-        // Проверяем буст
+        // Буст
         const boostEnd = await kv.get<number>(`boost:${userIdStr}`)
         const hasBoost = boostEnd && boostEnd > now
         const finalScore = (hasBoost ? score * 2 : score) + dailyBonus
 
+        // Основной баланс
         const current = (await kv.get<number>(`score:${userIdStr}`)) || 0
         const newBalance = current + finalScore
         await kv.set(`score:${userIdStr}`, newBalance)
+
+        // Статистика: всего раундов и лучший результат
+        const totalRoundsKey = `totalRounds:${userIdStr}`
+        const bestRoundKey = `bestRound:${userIdStr}`
+        
+        const totalRounds = (await kv.get<number>(totalRoundsKey)) || 0
+        await kv.set(totalRoundsKey, totalRounds + 1)
+        
+        const bestRound = (await kv.get<number>(bestRoundKey)) || 0
+        if (score > bestRound) {
+            await kv.set(bestRoundKey, score)
+        }
 
         if (firstName) {
             await kv.set(`name:${userIdStr}`, firstName)
@@ -73,7 +79,12 @@ export async function GET(req: NextRequest) {
     const userId = url.searchParams.get('userId')
     if (!userId) return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
 
-    const current = (await kv.get<number>(`score:${userId}`)) || 0
-    const streak = (await kv.get<number>(`streak:${userId}`)) || 0
-    return NextResponse.json({ balance: current, streak })
+    const userIdStr = userId.toString()
+    const balance = (await kv.get<number>(`score:${userIdStr}`)) || 0
+    const streak = (await kv.get<number>(`streak:${userIdStr}`)) || 0
+    const totalRounds = (await kv.get<number>(`totalRounds:${userIdStr}`)) || 0
+    const bestRound = (await kv.get<number>(`bestRound:${userIdStr}`)) || 0
+    const name = (await kv.get<string>(`name:${userIdStr}`)) || `ID: ${userIdStr}`
+
+    return NextResponse.json({ balance, streak, totalRounds, bestRound, name })
 }
