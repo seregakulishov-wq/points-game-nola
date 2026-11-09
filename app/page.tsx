@@ -208,17 +208,17 @@ export default function Home() {
     try {
       const userId = getUserId();
       const res = await fetch("/api/quests", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, questType: quest?.type, value: questProgress })
+        body: JSON.stringify({ userId })
       });
       const data = await res.json();
-      if (data.completed) {
+      if (res.ok) {
         setBalance(data.newBalance);
         alert(`🎁 Вы получили ${data.reward} очков за квест! Общий баланс: ${data.newBalance}`);
         fetchData();
       } else {
-        alert("❌ Квест ещё не выполнен.");
+        alert(`❌ ${data.error}`);
       }
     } catch (e) { alert("❌ Ошибка сети."); }
   };
