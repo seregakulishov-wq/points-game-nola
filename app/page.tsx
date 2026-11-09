@@ -29,7 +29,6 @@ export default function Home() {
   const [streak, setStreak] = useState(0);
   const [profileData, setProfileData] = useState({ name: "", totalRounds: 0, bestRound: 0 });
   
-  // Новые состояния для квестов
   const [quest, setQuest] = useState<{ id: string; title: string; reward: number; type: string; target: number } | null>(null);
   const [questProgress, setQuestProgress] = useState(0);
   const [questCompleted, setQuestCompleted] = useState(false);
@@ -58,7 +57,6 @@ export default function Home() {
     fetch(`/api/buy-combo?userId=${userId}`).then(res => res.json()).then(data => {
       if (data.active) { setComboBoostActive(true); setComboBoostMinutes(data.minutesLeft); }
     });
-    // Загрузка квеста
     fetch(`/api/quests?userId=${userId}`).then(res => res.json()).then(data => {
       if (data.quest) {
         setQuest(data.quest);
@@ -115,23 +113,28 @@ export default function Home() {
         setBalance(data.newBalance);
         setStreak(data.streak);
         
-        // Обновляем прогресс квеста
-        await fetch("/api/quests", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, questType: 'rounds', value: 1 })
-        });
-        // Отправляем счёт за раунд и комбо для квестов типа 'score' и 'combo'
-        await fetch("/api/quests", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, questType: 'score', value: score })
-        });
-        await fetch("/api/quests", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, questType: 'combo', value: combo })
-        });
+        // Обновляем прогресс квеста (только для текущего типа)
+        if (quest) {
+          if (quest.type === 'rounds') {
+            await fetch("/api/quests", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId, questType: 'rounds', value: 1 })
+            });
+          } else if (quest.type === 'score') {
+            await fetch("/api/quests", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId, questType: 'score', value: score })
+            });
+          } else if (quest.type === 'combo') {
+            await fetch("/api/quests", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId, questType: 'combo', value: combo })
+            });
+          }
+        }
 
         let msg = `✅ Вы заработали ${data.earned} очков! Общий баланс: ${data.newBalance}`;
         if (data.boostApplied) msg += ' (с бустом x2)';
@@ -288,7 +291,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* Ежедневный квест */}
             {quest && (
               <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
                 <p className="text-sm text-gray-300 mb-1">🎯 {quest.title}</p>
