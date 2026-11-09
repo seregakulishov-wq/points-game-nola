@@ -16,7 +16,6 @@ export async function POST(req: NextRequest) {
         let dailyBonus = 0
         let streak = 0
 
-        // Ежедневный вход
         if (!lastLogin || (now - lastLogin) > 24 * 60 * 60 * 1000) {
             const lastStreakKey = `streak:${userIdStr}`
             const currentStreak = await kv.get<number>(lastStreakKey) || 0
@@ -32,34 +31,72 @@ export async function POST(req: NextRequest) {
             streak = await kv.get<number>(`streak:${userIdStr}`) || 1
         }
 
-        // Буст
         const boostEnd = await kv.get<number>(`boost:${userIdStr}`)
         const hasBoost = boostEnd && boostEnd > now
         const finalScore = (hasBoost ? score * 2 : score) + dailyBonus
 
-        // Основной баланс
         const current = (await kv.get<number>(`score:${userIdStr}`)) || 0
         const newBalance = current + finalScore
         await kv.set(`score:${userIdStr}`, newBalance)
 
-        // Статистика: всего раундов и лучший результат
+        // Статистика
         const totalRoundsKey = `totalRounds:${userIdStr}`
         const bestRoundKey = `bestRound:${userIdStr}`
-        
         const totalRounds = (await kv.get<number>(totalRoundsKey)) || 0
         await kv.set(totalRoundsKey, totalRounds + 1)
-        
         const bestRound = (await kv.get<number>(bestRoundKey)) || 0
-        if (score > bestRound) {
-            await kv.set(bestRoundKey, score)
-        }
+        if (score > bestRound) await kv.set(bestRoundKey, score)
 
-        if (firstName) {
-            await kv.set(`name:${userIdStr}`, firstName)
-        }
+        if (firstName) await kv.set(`name:${userIdStr}`, firstName)
 
         // @ts-ignore
         await kv.zadd('leaderboard', { score: newBalance, member: userIdStr })
+
+        // --- Проверка достижений ---
+        const achievementsList: string[] = []
+        const newAchievements: string[] = []
+
+        // 1. Первый раунд
+        if (totalRounds + 1 >= 1 && !(await kv.get(`ach:firstRound:${userIdStr}`))) {
+            achievementsList.push("Первый раунд!");
+            newAchievements.push("firstRound");
+            await kv.set(`ach:firstRound:${userIdStr}`, 1);
+        }
+        // 2. 10 000 очков на балансе
+        if (newBalance >= 10000 && !(await kv.get(`ach:10k:${userIdStr}`))) {
+            achievementsList.push("10 000 очков!");
+            newAchievements.push("10k");
+            await kv.set(`ach:10k:${userIdStr}`, 1);
+        }
+        // 3. Топ-1 в лидерборде
+        // @ts-ignore
+        const top1 = await kv.zrange('leaderboard', 0, 0, { rev: true });
+        if (top1[0] === userIdStr && !(await kv.get(`ach:top1:${userIdStr}`))) {
+            achievementsList.push("Топ-1 в лидерборде!");
+            newAchievements.push("top1");
+            await kv.set(`ach:top1:${userIdStr}`, 1);
+        }
+
+        // Начисляем бонус за достижения (по 100 очков за каждое)
+        let achBonus = 0;
+        if (newAchievements.length > 0) {
+            achBonus = newAchievements.length * 100;
+            const updatedBalance = newBalance + achBonus;
+            await kv.set(`score:${userIdStr}`, updatedBalance);
+            // @ts-ignore
+            await kv.zadd('leaderboard', { score: updatedBalance, member: userIdStr });
+            
+            return NextResponse.json({ 
+                success: true, 
+                earned: finalScore, 
+                newBalance: updatedBalance,
+                boostApplied: hasBoost,
+                dailyBonus,
+                streak,
+                achievements: achievementsList,
+                achBonus
+            })
+        }
 
         return NextResponse.json({ 
             success: true, 
@@ -67,7 +104,9 @@ export async function POST(req: NextRequest) {
             newBalance,
             boostApplied: hasBoost,
             dailyBonus,
-            streak
+            streak,
+            achievements: [],
+            achBonus: 0
         })
     } catch (error) {
         return NextResponse.json({ error: 'Failed to save score' }, { status: 500 })
