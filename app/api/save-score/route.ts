@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
         let dailyBonus = 0
         let streak = 0
 
+        // Ежедневный вход
         if (!lastLogin || (now - lastLogin) > 24 * 60 * 60 * 1000) {
             const lastStreakKey = `streak:${userIdStr}`
             const currentStreak = await kv.get<number>(lastStreakKey) || 0
@@ -31,9 +32,23 @@ export async function POST(req: NextRequest) {
             streak = await kv.get<number>(`streak:${userIdStr}`) || 1
         }
 
+        // Проверяем бусты
         const boostEnd = await kv.get<number>(`boost:${userIdStr}`)
         const hasBoost = boostEnd && boostEnd > now
-        const finalScore = (hasBoost ? score * 2 : score) + dailyBonus
+        
+        const comboBoostEnd = await kv.get<number>(`comboboost:${userIdStr}`)
+        const hasComboBoost = comboBoostEnd && comboBoostEnd > now
+
+        // Применяем буст к очкам за раунд
+        let roundScore = score
+        if (hasComboBoost) {
+            roundScore = Math.floor(roundScore * 1.5)
+        }
+        if (hasBoost) {
+            roundScore = roundScore * 2
+        }
+
+        const finalScore = roundScore + dailyBonus
 
         const current = (await kv.get<number>(`score:${userIdStr}`)) || 0
         const newBalance = current + finalScore
@@ -52,32 +67,23 @@ export async function POST(req: NextRequest) {
         // @ts-ignore
         await kv.zadd('leaderboard', { score: newBalance, member: userIdStr })
 
-        // --- Проверка достижений ---
-        const achievementsList: string[] = []
+        // Достижения (проверяем только если они ещё не получены)
         const newAchievements: string[] = []
-
-        // 1. Первый раунд
         if (totalRounds + 1 >= 1 && !(await kv.get(`ach:firstRound:${userIdStr}`))) {
-            achievementsList.push("Первый раунд!");
-            newAchievements.push("firstRound");
+            newAchievements.push("Первый раунд!");
             await kv.set(`ach:firstRound:${userIdStr}`, 1);
         }
-        // 2. 10 000 очков на балансе
         if (newBalance >= 10000 && !(await kv.get(`ach:10k:${userIdStr}`))) {
-            achievementsList.push("10 000 очков!");
-            newAchievements.push("10k");
+            newAchievements.push("10 000 очков!");
             await kv.set(`ach:10k:${userIdStr}`, 1);
         }
-        // 3. Топ-1 в лидерборде
         // @ts-ignore
         const top1 = await kv.zrange('leaderboard', 0, 0, { rev: true });
         if (top1[0] === userIdStr && !(await kv.get(`ach:top1:${userIdStr}`))) {
-            achievementsList.push("Топ-1 в лидерборде!");
-            newAchievements.push("top1");
+            newAchievements.push("Топ-1 в лидерборде!");
             await kv.set(`ach:top1:${userIdStr}`, 1);
         }
 
-        // Начисляем бонус за достижения (по 100 очков за каждое)
         let achBonus = 0;
         if (newAchievements.length > 0) {
             achBonus = newAchievements.length * 100;
@@ -91,9 +97,10 @@ export async function POST(req: NextRequest) {
                 earned: finalScore, 
                 newBalance: updatedBalance,
                 boostApplied: hasBoost,
+                comboBoostApplied: hasComboBoost,
                 dailyBonus,
                 streak,
-                achievements: achievementsList,
+                achievements: newAchievements,
                 achBonus
             })
         }
@@ -103,6 +110,7 @@ export async function POST(req: NextRequest) {
             earned: finalScore, 
             newBalance,
             boostApplied: hasBoost,
+            comboBoostApplied: hasComboBoost,
             dailyBonus,
             streak,
             achievements: [],
