@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { kv } from '@vercel/kv'
 
-// Список возможных квестов
 const QUESTS = [
     { id: 'rounds3', title: 'Сыграй 3 раунда', reward: 500, type: 'rounds', target: 3 },
     { id: 'score5000', title: 'Набери 5000 очков за раунд', reward: 1000, type: 'score', target: 5000 },
@@ -16,26 +15,19 @@ export async function GET(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
 
     const userIdStr = userId.toString()
-    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0]
     
-    // Получаем текущий квест на сегодня
     const questKey = `dailyQuest:${userIdStr}:${today}`
     let questId = await kv.get<string>(questKey)
-    
     if (!questId) {
-        // Выбираем случайный квест
         const randomQuest = QUESTS[Math.floor(Math.random() * QUESTS.length)]
         questId = randomQuest.id
         await kv.set(questKey, questId)
     }
 
     const quest = QUESTS.find(q => q.id === questId)!
-    
-    // Получаем прогресс
     const progressKey = `questProgress:${userIdStr}:${today}`
     const progress = (await kv.get<number>(progressKey)) || 0
-    
-    // Получаем статус выполнения
     const completedKey = `questCompleted:${userIdStr}:${today}`
     const isCompleted = (await kv.get<boolean>(completedKey)) || false
 
@@ -49,44 +41,61 @@ export async function POST(req: NextRequest) {
 
         const userIdStr = userId.toString()
         const today = new Date().toISOString().split('T')[0]
-        
         const questKey = `dailyQuest:${userIdStr}:${today}`
         const questId = await kv.get<string>(questKey)
         if (!questId) return NextResponse.json({ error: 'Квест не найден' }, { status: 400 })
 
         const quest = QUESTS.find(q => q.id === questId)!
-        
-        // Обновляем прогресс в зависимости от типа
         const progressKey = `questProgress:${userIdStr}:${today}`
         let currentProgress = (await kv.get<number>(progressKey)) || 0
 
         if (quest.type === 'rounds') {
-            currentProgress += value; // value = +1 за раунд
+            currentProgress += value
         } else if (quest.type === 'score') {
-            if (value > currentProgress) currentProgress = value; // value = счёт за раунд
+            if (value > currentProgress) currentProgress = value
         } else if (quest.type === 'combo') {
-            if (value > currentProgress) currentProgress = value; // value = комбо
+            if (value > currentProgress) currentProgress = value
         }
 
         await kv.set(progressKey, currentProgress)
 
-        // Проверяем выполнение
-        let isCompleted = (await kv.get<boolean>(`questCompleted:${userIdStr}:${today}`)) || false
-        
-        if (currentProgress >= quest.target && !isCompleted) {
-            await kv.set(`questCompleted:${userIdStr}:${today}`, true)
-            
-            // Начисляем награду
-            const currentBalance = (await kv.get<number>(`score:${userIdStr}`)) || 0
-            const newBalance = currentBalance + quest.reward
-            await kv.set(`score:${userIdStr}`, newBalance)
-            // @ts-ignore
-            await kv.zadd('leaderboard', { score: newBalance, member: userIdStr })
+        // Только обновляем прогресс, НЕ ставим completed
+        return NextResponse.json({ success: true, progress: currentProgress })
+    } catch (error) {
+        return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 })
+    }
+}
 
-            return NextResponse.json({ success: true, completed: true, reward: quest.reward, newBalance })
-        }
+// Отдельный эндпоинт для получения награды
+export async function PUT(req: NextRequest) {
+    try {
+        const { userId } = await req.json()
+        if (!userId) return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
 
-        return NextResponse.json({ success: true, completed: false, progress: currentProgress })
+        const userIdStr = userId.toString()
+        const today = new Date().toISOString().split('T')[0]
+        const questKey = `dailyQuest:${userIdStr}:${today}`
+        const questId = await kv.get<string>(questKey)
+        if (!questId) return NextResponse.json({ error: 'Квест не найден' }, { status: 400 })
+
+        const quest = QUESTS.find(q => q.id === questId)!
+        const progressKey = `questProgress:${userIdStr}:${today}`
+        const progress = (await kv.get<number>(progressKey)) || 0
+        const completedKey = `questCompleted:${userIdStr}:${today}`
+        const isCompleted = (await kv.get<boolean>(completedKey)) || false
+
+        if (progress < quest.target) return NextResponse.json({ error: 'Квест не выполнен' }, { status: 400 })
+        if (isCompleted) return NextResponse.json({ error: 'Награда уже получена' }, { status: 400 })
+
+        await kv.set(completedKey, true)
+
+        const currentBalance = (await kv.get<number>(`score:${userIdStr}`)) || 0
+        const newBalance = currentBalance + quest.reward
+        await kv.set(`score:${userIdStr}`, newBalance)
+        // @ts-ignore
+        await kv.zadd('leaderboard', { score: newBalance, member: userIdStr })
+
+        return NextResponse.json({ success: true, reward: quest.reward, newBalance })
     } catch (error) {
         return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 })
     }
