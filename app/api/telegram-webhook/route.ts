@@ -125,21 +125,31 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ok: true })
         }
 
-        // Handle /start command
-        if (update.message?.text === '/start') {
+        // Handle /start command (with optional referral: /start ref_<userId>)
+        if (update.message?.text?.startsWith('/start')) {
+            const parts = update.message.text.split(' ')
+            const param = parts[1] // e.g. "ref_123456"
+            const newUserId = update.message.from.id
+
+            let webAppUrl = APP_URL
+            if (param?.startsWith('ref_')) {
+                // Pass the referral param through to the Mini App
+                webAppUrl = `${APP_URL}?startapp=${param}`
+            }
+
             await sendTelegramMessage(
                 update.message.chat.id,
-                '🎮 *Welcome to Points Game!*\n\n' +
+                '🎮 *Welcome to Combo Game!*\n\n' +
                 'Collect points and compete with friends!\n\n' +
                 '🎁 Daily rewards\n' +
-                '💎 Buy points with Stars (real payments!)\n' +
-                '💸 Test refunds with `/refund`\n\n' +
+                '💎 Buy boosts with Stars\n' +
+                '👥 Invite friends and earn +500 points\n\n' +
                 'Tap the button below to play!',
                 {
                     parse_mode: 'Markdown',
                     reply_markup: {
                         inline_keyboard: [[
-                            { text: '🎮 Play Game', web_app: { url: APP_URL } }
+                            { text: '🎮 Play Game', web_app: { url: webAppUrl } }
                         ]]
                     }
                 }

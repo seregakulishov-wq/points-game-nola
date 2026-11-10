@@ -32,6 +32,7 @@ export default function Home() {
   const [quest, setQuest] = useState<{ id: string; title: string; reward: number; type: string; target: number } | null>(null);
   const [questProgress, setQuestProgress] = useState(0);
   const [questCompleted, setQuestCompleted] = useState(false);
+  const [referralBonus, setReferralBonus] = useState<number | null>(null);
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
@@ -73,6 +74,28 @@ export default function Home() {
           window.Telegram.WebApp.ready();
           clearInterval(check);
           fetchData();
+
+          // Handle referral: bot passes start_param=ref_<referrerId>
+          const startParam: string | undefined = window.Telegram.WebApp.initDataUnsafe?.start_param;
+          if (startParam?.startsWith("ref_")) {
+            const referrerId = startParam.slice(4);
+            const userId = window.Telegram.WebApp.initDataUnsafe?.user?.id;
+            if (userId && referrerId && userId.toString() !== referrerId) {
+              fetch("/api/referral", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, referrerId }),
+              })
+                .then((res) => res.json())
+                .then((data) => {
+                  if (data.success) {
+                    setReferralBonus(data.refereeBonus);
+                    setBalance((prev) => prev + data.refereeBonus);
+                  }
+                })
+                .catch(() => {});
+            }
+          }
         }
       }, 100);
       return () => clearInterval(check);
@@ -308,11 +331,30 @@ export default function Home() {
 
           {gameState === "idle" && (
             <div className="flex flex-col gap-4">
+              {referralBonus !== null && (
+                <div className="bg-green-800 border border-green-500 rounded-lg px-4 py-2 text-center text-green-200 text-sm">
+                  🎉 Вы пришли по реферальной ссылке — +{referralBonus} очков!
+                </div>
+              )}
               <button onClick={startGame} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">Начать игру</button>
               <div className="flex gap-2 justify-center">
                 <button onClick={() => setShowLeaderboard(true)} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">🏆 Лидерборд</button>
                 <button onClick={() => setShowProfile(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">👤 Профиль</button>
               </div>
+              <button
+                onClick={() => {
+                  const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+                  if (!userId) return;
+                  const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME;
+                  const link = `https://t.me/${botUsername}?startapp=ref_${userId}`;
+                  window.Telegram.WebApp.openTelegramLink(
+                    `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Присоединяйся к Combo Game и получи 200 очков в подарок! 🎮")}`
+                  );
+                }}
+                className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg"
+              >
+                👥 Пригласить друга (+500 очков)
+              </button>
               <button onClick={fetchData} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm">🔄 Обновить данные</button>
             </div>
           )}
