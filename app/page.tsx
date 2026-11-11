@@ -37,6 +37,7 @@ export default function Home() {
   const [referralBonus, setReferralBonus] = useState<number | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Игрок считается новичком, пока не сыграл ни одного раунда
   const hasPlayed = profileData.totalRounds > 0;
@@ -313,6 +314,14 @@ export default function Home() {
     }
   };
 
+  const helpSections = [
+    { emoji: "👆", title: "Как играть", text: "Нажимай на 👆, чтобы набирать очки. Чем больше комбо — тем больше очков." },
+    { emoji: "🚀", title: "Бусты", text: "Покупай бусты за Telegram Stars. Они дают x2 очков, +10 секунд к таймеру или +50% к комбо." },
+    { emoji: "🎯", title: "Квесты", text: "Выбери квест на сегодня, выполни его и получи награду." },
+    { emoji: "👥", title: "Друзья", text: "Приглашай друзей по реферальной ссылке и получай +500 очков." },
+    { emoji: "🏆", title: "Лидерборд", text: "Соревнуйся с другими игроками. Топ-3 получают медали." },
+  ];
+
   const getMedal = (index: number) => {
     if (index === 0) return "🥇";
     if (index === 1) return "🥈";
@@ -322,6 +331,46 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
+      {/* Кнопка справки — видна всегда, в правом верхнем углу */}
+      <button
+        onClick={() => setShowHelp(true)}
+        aria-label="Помощь"
+        className="fixed top-3 right-3 z-40 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg text-sm shadow-lg"
+      >
+        ❓ Помощь
+      </button>
+
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto bg-gray-800 rounded-xl p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold">📖 Справочник</h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                aria-label="Закрыть"
+                className="text-gray-400 hover:text-white text-2xl leading-none px-2"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4">
+              {helpSections.map((section) => (
+                <div key={section.title} className="bg-gray-900 rounded-lg p-3">
+                  <h3 className="font-bold text-lg mb-1">{section.emoji} {section.title}</h3>
+                  <p className="text-sm text-gray-300">{section.text}</p>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowHelp(false)}
+              className="mt-5 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              Закрыть
+            </button>
+          </div>
+        </div>
+      )}
+
       {showTutorial && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-900 p-6">
           <div className="w-full max-w-sm flex flex-col items-center text-center">
