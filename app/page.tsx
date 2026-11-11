@@ -35,6 +35,11 @@ export default function Home() {
   const [questProgress, setQuestProgress] = useState(0);
   const [questCompleted, setQuestCompleted] = useState(false);
   const [referralBonus, setReferralBonus] = useState<number | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+
+  // Игрок считается новичком, пока не сыграл ни одного раунда
+  const hasPlayed = profileData.totalRounds > 0;
 
   const getUserId = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1;
   const getFirstName = () => window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "Игрок";
@@ -80,6 +85,12 @@ export default function Home() {
           window.Telegram.WebApp.ready();
           clearInterval(check);
           fetchData();
+
+          // Онбординг: показываем при первом входе, если флаг ещё не сохранён
+          const userId = getUserId();
+          fetch(`/api/tutorial?userId=${userId}`).then(res => res.json()).then(data => {
+            if (!data.seen) { setShowTutorial(true); setTutorialStep(0); }
+          }).catch(() => {});
 
           // Handle referral: bot passes start_param=ref_<referrerId>
           const startParam: string | undefined = window.Telegram.WebApp.initDataUnsafe?.start_param;
@@ -269,6 +280,39 @@ export default function Home() {
     } catch (e) { alert("❌ Ошибка сети."); }
   };
 
+  const tutorialSlides = [
+    {
+      emoji: "👆",
+      text: "Добро пожаловать в Combo Game! Нажимай на 👆, чтобы набирать очки. Чем больше комбо — тем больше очков.",
+    },
+    {
+      emoji: "🚀",
+      text: "За очки покупай бусты и выполняй квесты. Они дают ещё больше очков.",
+    },
+    {
+      emoji: "🏆",
+      text: "Приглашай друзей и соревнуйся в лидерборде. Удачи!",
+    },
+  ];
+
+  const finishTutorial = () => {
+    setShowTutorial(false);
+    const userId = getUserId();
+    fetch("/api/tutorial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    }).catch(() => {});
+  };
+
+  const nextTutorialStep = () => {
+    if (tutorialStep < tutorialSlides.length - 1) {
+      setTutorialStep(tutorialStep + 1);
+    } else {
+      finishTutorial();
+    }
+  };
+
   const getMedal = (index: number) => {
     if (index === 0) return "🥇";
     if (index === 1) return "🥈";
@@ -278,6 +322,37 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
+      {showTutorial && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-900 p-6">
+          <div className="w-full max-w-sm flex flex-col items-center text-center">
+            <div className="text-7xl mb-6">{tutorialSlides[tutorialStep].emoji}</div>
+            <p className="text-lg mb-8 min-h-[6rem]">{tutorialSlides[tutorialStep].text}</p>
+            <div className="flex gap-2 mb-8">
+              {tutorialSlides.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-2 w-2 rounded-full ${i === tutorialStep ? "bg-blue-500" : "bg-gray-600"}`}
+                />
+              ))}
+            </div>
+            <div className="flex flex-col gap-3 w-full">
+              <button
+                onClick={nextTutorialStep}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg"
+              >
+                {tutorialStep < tutorialSlides.length - 1 ? "Далее" : "Начать"}
+              </button>
+              <button
+                onClick={finishTutorial}
+                className="text-gray-400 hover:text-gray-200 text-sm py-2"
+              >
+                Пропустить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-3xl font-bold mb-2">🎮 Combo Game</h1>
       
       <div className="text-center mb-4">
@@ -318,6 +393,7 @@ export default function Home() {
         </div>
       ) : (
         <>
+          {hasPlayed && (
           <div className="mb-6 flex flex-col items-center gap-2">
             {dailyState === "loading" && <p className="text-gray-400">Загрузка награды...</p>}
             {dailyState === "available" && (
@@ -368,6 +444,7 @@ export default function Home() {
               </div>
             )}
           </div>
+          )}
 
           {gameState === "idle" && (
             <div className="flex flex-col gap-4">
@@ -379,23 +456,29 @@ export default function Home() {
               <button onClick={startGame} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">Начать игру</button>
               <div className="flex gap-2 justify-center">
                 <button onClick={() => setShowLeaderboard(true)} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">🏆 Лидерборд</button>
-                <button onClick={() => setShowProfile(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">👤 Профиль</button>
+                {hasPlayed && (
+                  <button onClick={() => setShowProfile(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">👤 Профиль</button>
+                )}
               </div>
-              <button
-                onClick={() => {
-                  const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-                  if (!userId) return;
-                  const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME;
-                  const link = `https://t.me/${botUsername}?startapp=ref_${userId}`;
-                  window.Telegram.WebApp.openTelegramLink(
-                    `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Присоединяйся к Combo Game и получи 200 очков в подарок! 🎮")}`
-                  );
-                }}
-                className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg"
-              >
-                👥 Пригласить друга (+500 очков)
-              </button>
-              <button onClick={fetchData} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm">🔄 Обновить данные</button>
+              {hasPlayed && (
+                <button
+                  onClick={() => {
+                    const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+                    if (!userId) return;
+                    const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME;
+                    const link = `https://t.me/${botUsername}?startapp=ref_${userId}`;
+                    window.Telegram.WebApp.openTelegramLink(
+                      `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Присоединяйся к Combo Game и получи 200 очков в подарок! 🎮")}`
+                    );
+                  }}
+                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg"
+                >
+                  👥 Пригласить друга (+500 очков)
+                </button>
+              )}
+              {hasPlayed && (
+                <button onClick={fetchData} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm">🔄 Обновить данные</button>
+              )}
             </div>
           )}
 
