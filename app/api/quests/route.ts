@@ -16,13 +16,15 @@ export async function GET(req: NextRequest) {
 
     const userIdStr = userId.toString()
     const today = new Date().toISOString().split('T')[0]
-    
-    const questKey = `dailyQuest:${userIdStr}:${today}`
-    let questId = await kv.get<string>(questKey)
+
+    const questKey = `selectedQuest:${userIdStr}:${today}`
+    const questId = await kv.get<string>(questKey)
+
+    // Игрок ещё не выбрал квест на сегодня — предлагаем 3 случайных варианта
     if (!questId) {
-        const randomQuest = QUESTS[Math.floor(Math.random() * QUESTS.length)]
-        questId = randomQuest.id
-        await kv.set(questKey, questId)
+        const shuffled = [...QUESTS].sort(() => Math.random() - 0.5)
+        const choices = shuffled.slice(0, 3)
+        return NextResponse.json({ choices })
     }
 
     const quest = QUESTS.find(q => q.id === questId)!
@@ -36,12 +38,24 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const { userId, questType, value } = await req.json()
+        const { userId, action, questId: selectedQuestId, questType, value } = await req.json()
         if (!userId) return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
 
         const userIdStr = userId.toString()
         const today = new Date().toISOString().split('T')[0]
-        const questKey = `dailyQuest:${userIdStr}:${today}`
+        const questKey = `selectedQuest:${userIdStr}:${today}`
+
+        // Выбор квеста на сегодня
+        if (action === 'select') {
+            if (!selectedQuestId || !QUESTS.find(q => q.id === selectedQuestId)) {
+                return NextResponse.json({ error: 'Неверный квест' }, { status: 400 })
+            }
+            const existing = await kv.get<string>(questKey)
+            if (existing) return NextResponse.json({ error: 'Квест уже выбран' }, { status: 400 })
+            await kv.set(questKey, selectedQuestId)
+            return NextResponse.json({ success: true, quest: QUESTS.find(q => q.id === selectedQuestId) })
+        }
+
         const questId = await kv.get<string>(questKey)
         if (!questId) return NextResponse.json({ error: 'Квест не найден' }, { status: 400 })
 
@@ -74,7 +88,7 @@ export async function PUT(req: NextRequest) {
 
         const userIdStr = userId.toString()
         const today = new Date().toISOString().split('T')[0]
-        const questKey = `dailyQuest:${userIdStr}:${today}`
+        const questKey = `selectedQuest:${userIdStr}:${today}`
         const questId = await kv.get<string>(questKey)
         if (!questId) return NextResponse.json({ error: 'Квест не найден' }, { status: 400 })
 

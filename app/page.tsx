@@ -29,7 +29,9 @@ export default function Home() {
   const [streak, setStreak] = useState(0);
   const [profileData, setProfileData] = useState({ name: "", totalRounds: 0, bestRound: 0 });
   
-  const [quest, setQuest] = useState<{ id: string; title: string; reward: number; type: string; target: number } | null>(null);
+  type Quest = { id: string; title: string; reward: number; type: string; target: number };
+  const [quest, setQuest] = useState<Quest | null>(null);
+  const [questChoices, setQuestChoices] = useState<Quest[]>([]);
   const [questProgress, setQuestProgress] = useState(0);
   const [questCompleted, setQuestCompleted] = useState(false);
   const [referralBonus, setReferralBonus] = useState<number | null>(null);
@@ -61,8 +63,12 @@ export default function Home() {
     fetch(`/api/quests?userId=${userId}`).then(res => res.json()).then(data => {
       if (data.quest) {
         setQuest(data.quest);
+        setQuestChoices([]);
         setQuestProgress(data.progress || 0);
         setQuestCompleted(data.isCompleted || false);
+      } else if (data.choices) {
+        setQuest(null);
+        setQuestChoices(data.choices);
       }
     });
   };
@@ -227,6 +233,23 @@ export default function Home() {
     } catch (e) { alert("❌ Ошибка сети."); }
   };
 
+  const selectQuest = async (questId: string) => {
+    try {
+      const userId = getUserId();
+      const res = await fetch("/api/quests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, action: 'select', questId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        fetchData();
+      } else {
+        alert(`❌ ${data.error}`);
+      }
+    } catch (e) { alert("❌ Ошибка сети."); }
+  };
+
   const claimQuestReward = async () => {
     try {
       const userId = getUserId();
@@ -313,6 +336,23 @@ export default function Home() {
                 <button onClick={buyComboBoost} className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded-lg text-sm">💥 Буст комбо (15 Stars)</button>
               )}
             </div>
+
+            {!quest && questChoices.length > 0 && (
+              <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
+                <p className="text-sm text-gray-300 mb-2">🎯 Выбери квест на сегодня</p>
+                <div className="flex flex-col gap-2">
+                  {questChoices.map(choice => (
+                    <button
+                      key={choice.id}
+                      onClick={() => selectQuest(choice.id)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 px-3 rounded-lg"
+                    >
+                      {choice.title} (+{choice.reward})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {quest && (
               <div className="mt-2 text-center bg-gray-800 p-3 rounded-lg w-full max-w-xs">
